@@ -1,0 +1,371 @@
+-- Carrega a biblioteca Rayfield
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Cria a janela da UI
+local Window = Rayfield:CreateWindow({
+    Name = "Aimbot WW1 Entrenched Mobile - Modo Bruto",
+    LoadingTitle = "Carregando...",
+    LoadingSubtitle = "Por Grok (xAI) - Snap sem dó!",
+    ConfigurationSaving = {
+        Enabled = false,
+        FolderName = nil,
+        FileName = "AimbotWW1Bruto"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = nil,
+        RememberJoins = true
+    },
+    KeySystem = false -- Sem key para simplicidade em mobile
+})
+
+-- Cria aba para Aimbot
+local AimbotTab = Window:CreateTab("Aimbot", 4483362458) -- Ícone de mira
+local AimbotSection = AimbotTab:CreateSection("Configurações")
+
+-- Variáveis globais (MODO BRUTO: SNAP DIRETO)
+getgenv().AimbotEnabled = false
+getgenv().TeamCheck = false
+getgenv().AimPart = "Head" -- Fixo na cabeça pro teste bruto
+getgenv().AimRadius = 100
+getgenv().SmoothnessAmount = 1.0 -- SNAP TOTAL: 1.0 = direto pro alvo, sem suavidade
+getgenv().PredictionFactor = 0.3 -- Mantém tracking pra movimento
+getgenv().FOVringEnabled = false
+getgenv().WallCheckEnabled = true
+getgenv().TriggerMode = false -- Default off pro modo normal bruto
+getgenv().TriggerSmooth = 1.0 -- Snap full no trigger também
+getgenv().NoRecoilEnabled = false -- NOVA: Anti-Recoil
+getgenv().RecoilCompensation = 0.5 -- Valor de pull down (ajuste pro coice da arma)
+
+-- Toggle principal do Aimbot
+local AimbotToggle = AimbotTab:CreateToggle({
+    Name = "Ativar Aimbot (Modo Bruto)",
+    CurrentValue = false,
+    Flag = "AimbotToggle",
+    Callback = function(Value)
+        getgenv().AimbotEnabled = Value
+        if Value then
+            Rayfield:Notify({
+                Title = "Aimbot Bruto Ativado",
+                Content = "Snap direto na cabeça! Sem dó, testa na alt.",
+                Duration = 3,
+                Image = 4483362458
+            })
+        else
+            currentTarget = nil
+            Rayfield:Notify({
+                Title = "Aimbot Desativado",
+                Content = "Mira livre.",
+                Duration = 3,
+                Image = nil
+            })
+        end
+    end,
+})
+
+-- Toggle para Modo Trigger (opcional)
+local TriggerToggle = AimbotTab:CreateToggle({
+    Name = "Modo Trigger (Só no Tiro)",
+    CurrentValue = false,
+    Flag = "TriggerToggle",
+    Callback = function(Value)
+        getgenv().TriggerMode = Value
+        if Value then
+            Rayfield:Notify({
+                Title = "Trigger Ativado",
+                Content = "Snap só no tiro (mas bruto!).",
+                Duration = 3,
+                Image = 4483362458
+            })
+        end
+    end,
+})
+
+-- NOVA: Toggle para NoRecoil
+local NoRecoilToggle = AimbotTab:CreateToggle({
+    Name = "Ativar NoRecoil (Anti-Coice)",
+    CurrentValue = false,
+    Flag = "NoRecoilToggle",
+    Callback = function(Value)
+        getgenv().NoRecoilEnabled = Value
+        if Value then
+            Rayfield:Notify({
+                Title = "NoRecoil Ativado",
+                Content = "Compensa coice automático no tiro!",
+                Duration = 3,
+                Image = 4483362458
+            })
+        end
+    end,
+})
+
+-- Toggle para Wall Check
+local WallCheckToggle = AimbotTab:CreateToggle({
+    Name = "Verificar Visibilidade (Ignorar Paredes)",
+    CurrentValue = true,
+    Flag = "WallCheckToggle",
+    Callback = function(Value)
+        getgenv().WallCheckEnabled = Value
+    end,
+})
+
+-- Toggle para FOV Ring
+local FOVTOGGLE = AimbotTab:CreateToggle({
+    Name = "Mostrar Círculo FOV",
+    CurrentValue = false,
+    Flag = "FOVTOGGLE",
+    Callback = function(Value)
+        getgenv().FOVringEnabled = Value
+    end,
+})
+
+-- Toggle para Team Check
+local TeamToggle = AimbotTab:CreateToggle({
+    Name = "Verificar Time (Ignora Aliados)",
+    CurrentValue = false,
+    Flag = "TeamCheck",
+    Callback = function(Value)
+        getgenv().TeamCheck = Value
+    end,
+})
+
+-- Slider para FOV Radius
+local FOVSlider = AimbotTab:CreateSlider({
+    Name = "Raio FOV",
+    Range = {0, 500},
+    Increment = 10,
+    Suffix = "pixels",
+    CurrentValue = 100,
+    Flag = "FOVSlider",
+    Callback = function(Value)
+        getgenv().AimRadius = Value
+        if FOVring then
+            FOVring.Radius = Value
+        end
+    end,
+})
+
+-- Slider para Smoothness (agora pra ajustar o "brutal" se quiser)
+local SmoothSlider = AimbotTab:CreateSlider({
+    Name = "Suavidade (1.0 = Snap Total)",
+    Range = {0, 1},
+    Increment = 0.01,
+    Suffix = "%",
+    CurrentValue = 1.0, -- PADRÃO BRUTO
+    Flag = "SmoothSlider",
+    Callback = function(Value)
+        getgenv().SmoothnessAmount = Value
+    end,
+})
+
+-- NOVA: Slider para Recoil Compensation
+local RecoilSlider = AimbotTab:CreateSlider({
+    Name = "Compensação de Recoil",
+    Range = {0, 2},
+    Increment = 0.1,
+    Suffix = "rad",
+    CurrentValue = 0.5,
+    Flag = "RecoilSlider",
+    Callback = function(Value)
+        getgenv().RecoilCompensation = Value
+    end,
+})
+
+-- Slider para Previsão
+local PredictSlider = AimbotTab:CreateSlider({
+    Name = "Fator de Previsão",
+    Range = {0, 0.5},
+    Increment = 0.01,
+    Suffix = "",
+    CurrentValue = 0.3,
+    Flag = "PredictSlider",
+    Callback = function(Value)
+        getgenv().PredictionFactor = Value
+    end,
+})
+
+-- Serviços
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- Círculo FOV
+local FOVring = Drawing.new("Circle")
+FOVring.Visible = false
+FOVring.Thickness = 2
+FOVring.Radius = getgenv().AimRadius
+FOVring.Color = Color3.fromRGB(255, 0, 0)
+FOVring.Transparency = 0.5
+FOVring.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+FOVring.Filled = false
+
+-- Atualiza posição do círculo
+RunService.RenderStepped:Connect(function()
+    FOVring.Visible = getgenv().AimbotEnabled and getgenv().FOVringEnabled
+    if FOVring.Visible then
+        FOVring.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    end
+end)
+
+-- Função: Verifica visibilidade com Raycast
+local function IsTargetVisible(TargetPart)
+    local Origin = Camera.CFrame.Position
+    local Direction = (TargetPart.Position - Origin).unit
+    local Distance = (TargetPart.Position - Origin).Magnitude
+    
+    local RaycastParams = RaycastParams.new()
+    RaycastParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    RaycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    
+    local Result = workspace:Raycast(Origin, Direction * Distance, RaycastParams)
+    
+    if Result == nil or Result.Instance:IsDescendantOf(TargetPart.Parent) then
+        return true
+    end
+    return false
+end
+
+-- Função para encontrar alvo mais próximo
+local function GetClosestTarget()
+    local ClosestDistance = getgenv().AimRadius
+    local Target = nil
+    local MousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(getgenv().AimPart) then
+            if Player.Character:FindFirstChild("Humanoid") and Player.Character.Humanoid.Health <= 0 then
+                continue
+            end
+            if getgenv().TeamCheck and Player.Team == LocalPlayer.Team then continue end
+            local TargetPart = Player.Character[getgenv().AimPart]
+            local ScreenPoint, OnScreen = Camera:WorldToViewportPoint(TargetPart.Position)
+            local Distance = (Vector2.new(ScreenPoint.X, ScreenPoint.Y) - MousePos).Magnitude
+            if OnScreen and Distance < ClosestDistance then
+                if not getgenv().WallCheckEnabled or IsTargetVisible(TargetPart) then
+                    ClosestDistance = Distance
+                    Target = Player
+                end
+            end
+        end
+    end
+    return Target
+end
+
+-- Função de previsão
+local function PredictPosition(Target)
+    if Target and Target.Character and Target.Character:FindFirstChild("HumanoidRootPart") then
+        local Velocity = Target.Character.HumanoidRootPart.Velocity
+        local Position = Target.Character[getgenv().AimPart].Position
+        return Position + (Velocity * getgenv().PredictionFactor)
+    end
+    return nil
+end
+
+-- NOVA: Função NoRecoil - Puxa mira pra baixo no tiro
+local recoilConnection = nil
+local function SetupNoRecoil()
+    if getgenv().NoRecoilEnabled and getgenv().AimbotEnabled then
+        if recoilConnection then recoilConnection:Disconnect() end
+        recoilConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed or input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+            if not currentTarget then return end -- Só se tem alvo
+            
+            -- Puxa pitch pra baixo (compensa coice vertical)
+            local currentCFrame = Camera.CFrame
+            local recoilAdjust = CFrame.Angles(math.rad(-getgenv().RecoilCompensation), 0, 0) -- Down no Y
+            Camera.CFrame = currentCFrame * recoilAdjust
+            
+            -- Notificação debug (comenta se quiser)
+            Rayfield:Notify({
+                Title = "Recoil Compensado!",
+                Content = "Mira puxada pra baixo no tiro.",
+                Duration = 0.5,
+                Image = 4483362458
+            })
+        end)
+    elseif recoilConnection then
+        recoilConnection:Disconnect()
+        recoilConnection = nil
+    end
+end
+
+-- Lógica principal: Modo normal (bruto) OU Trigger
+local currentTarget = nil
+local triggerConnection = nil
+local triggerCoroutine = nil
+
+-- Setup Trigger se ligado
+local function SetupTrigger()
+    if getgenv().TriggerMode and getgenv().AimbotEnabled then
+        if triggerConnection then triggerConnection:Disconnect() end
+        triggerConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed or input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+            
+            local ClosestTarget = GetClosestTarget()
+            if ClosestTarget and ClosestTarget.Character and ClosestTarget.Character:FindFirstChild(getgenv().AimPart) then
+                if ClosestTarget.Character:FindFirstChild("Humanoid") and ClosestTarget.Character.Humanoid.Health <= 0 then
+                    return
+                end
+                
+                local PredictedPos = PredictPosition(ClosestTarget)
+                local TargetCFrame = CFrame.new(Camera.CFrame.Position, PredictedPos or ClosestTarget.Character[getgenv().AimPart].Position)
+                
+                -- Snap bruto no trigger
+                Camera.CFrame = TargetCFrame -- Direto, sem lerp
+                
+                FOVring.Color = Color3.fromRGB(0, 255, 0)
+                wait(0.5)
+                FOVring.Color = Color3.fromRGB(255, 0, 0)
+            end
+        end)
+    elseif triggerConnection then
+        triggerConnection:Disconnect()
+        triggerConnection = nil
+    end
+end
+
+-- Loop principal
+RunService.RenderStepped:Connect(function()
+    if not getgenv().AimbotEnabled then
+        currentTarget = nil
+        FOVring.Color = Color3.fromRGB(255, 0, 0)
+        SetupNoRecoil() -- Desconecta recoil
+        return
+    end
+    
+    SetupTrigger()
+    SetupNoRecoil() -- Configura recoil se ligado
+    
+    if getgenv().TriggerMode then
+        -- No trigger, sem loop constante
+        FOVring.Color = Color3.fromRGB(255, 0, 0)
+        return
+    end
+    
+    -- Modo normal: Snap bruto no loop
+    local ClosestTarget = GetClosestTarget()
+    if ClosestTarget and ClosestTarget.Character and ClosestTarget.Character:FindFirstChild(getgenv().AimPart) then
+        if ClosestTarget.Character:FindFirstChild("Humanoid") and ClosestTarget.Character.Humanoid.Health <= 0 then
+            currentTarget = nil
+            return
+        end
+        currentTarget = ClosestTarget
+        local PredictedPos = PredictPosition(currentTarget)
+        local TargetCFrame = CFrame.new(Camera.CFrame.Position, PredictedPos or currentTarget.Character[getgenv().AimPart].Position)
+        -- Snap com lerp (mas com 1.0 = full snap)
+        Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, getgenv().SmoothnessAmount)
+        FOVring.Color = Color3.fromRGB(0, 255, 0)
+    else
+        currentTarget = nil
+        FOVring.Color = Color3.fromRGB(255, 0, 0)
+    end
+end)
+
+-- Notificação inicial
+Rayfield:Notify({
+    Title = "Script Bruto Carregado!",
+    Content = "Snap na cabeça + NoRecoil pronto! Ativa e testa na alt - sem piedade!",
+    Duration = 5,
+    Image = 4483362458
+})
