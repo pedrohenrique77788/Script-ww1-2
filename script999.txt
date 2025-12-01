@@ -5,7 +5,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
     Name = "Aimbot WW1 Entrenched Mobile - Modo Bruto",
     LoadingTitle = "Carregando...",
-    LoadingSubtitle = "Por Grok (xAI) - Snap sem dó!",
+    LoadingSubtitle = "Por Grok (xAI) - Snap sem dó! Modificado sem previsão.",
     ConfigurationSaving = {
         Enabled = false,
         FolderName = nil,
@@ -23,13 +23,14 @@ local Window = Rayfield:CreateWindow({
 local AimbotTab = Window:CreateTab("Aimbot", 4483362458) -- Ícone de mira
 local AimbotSection = AimbotTab:CreateSection("Configurações")
 
--- Variáveis globais (MODO BRUTO: SNAP DIRETO)
+-- Variáveis globais (MODO BRUTO: SNAP DIRETO, SEM PREVISÃO)
 getgenv().AimbotEnabled = false
 getgenv().TeamCheck = false
 getgenv().AimPart = "Head" -- Fixo na cabeça pro teste bruto
-getgenv().AimRadius = 100
+getgenv().AimRadius = 100 -- FOV em pixels (tela)
+getgenv().AimMaxDistance = 500 -- Nova: Tamanho real do FOV em studs (distância 3D)
+getgenv().FOVType = "Screen" -- Nova: Tipo de FOV - "Screen" (pixels) ou "World" (studs)
 getgenv().SmoothnessAmount = 1.0 -- SNAP TOTAL: 1.0 = direto pro alvo, sem suavidade
-getgenv().PredictionFactor = 0.3 -- Mantém tracking pra movimento
 getgenv().FOVringEnabled = false
 getgenv().WallCheckEnabled = true
 getgenv().TriggerMode = false -- Default off pro modo normal bruto
@@ -47,7 +48,7 @@ local AimbotToggle = AimbotTab:CreateToggle({
         if Value then
             Rayfield:Notify({
                 Title = "Aimbot Bruto Ativado",
-                Content = "Snap direto na cabeça! Sem dó, testa na alt.",
+                Content = "Snap direto na cabeça! Sem previsão, sem dó, testa na alt.",
                 Duration = 3,
                 Image = 4483362458
             })
@@ -73,7 +74,7 @@ local TriggerToggle = AimbotTab:CreateToggle({
         if Value then
             Rayfield:Notify({
                 Title = "Trigger Ativado",
-                Content = "Snap só no tiro (mas bruto!).",
+                Content = "Snap só no tiro (bruto!).",
                 Duration = 3,
                 Image = 4483362458
             })
@@ -129,9 +130,20 @@ local TeamToggle = AimbotTab:CreateToggle({
     end,
 })
 
--- Slider para FOV Radius
+-- Nova: Dropdown para Tipo de FOV
+local FOVTypeDropdown = AimbotTab:CreateDropdown({
+    Name = "Tipo de FOV",
+    Options = {"Screen", "World"},
+    CurrentOption = "Screen",
+    Flag = "FOVTypeDropdown",
+    Callback = function(Option)
+        getgenv().FOVType = Option
+    end,
+})
+
+-- Slider para FOV Raio (pixels para Screen)
 local FOVSlider = AimbotTab:CreateSlider({
-    Name = "Raio FOV",
+    Name = "Raio FOV (pixels)",
     Range = {0, 500},
     Increment = 10,
     Suffix = "pixels",
@@ -142,6 +154,19 @@ local FOVSlider = AimbotTab:CreateSlider({
         if FOVring then
             FOVring.Radius = Value
         end
+    end,
+})
+
+-- Nova: Slider para Distância Máxima (studs para World)
+local DistanceSlider = AimbotTab:CreateSlider({
+    Name = "Distância Máx FOV (studs)",
+    Range = {0, 1000},
+    Increment = 50,
+    Suffix = "studs",
+    CurrentValue = 500,
+    Flag = "DistanceSlider",
+    Callback = function(Value)
+        getgenv().AimMaxDistance = Value
     end,
 })
 
@@ -171,18 +196,153 @@ local RecoilSlider = AimbotTab:CreateSlider({
     end,
 })
 
--- Slider para Previsão
-local PredictSlider = AimbotTab:CreateSlider({
-    Name = "Fator de Previsão",
-    Range = {0, 0.5},
-    Increment = 0.01,
-    Suffix = "",
-    CurrentValue = 0.3,
-    Flag = "PredictSlider",
+-- NOVA: Aba Hitbox
+local HitboxTab = Window:CreateTab("Hitbox", 4483362458) -- Ícone similar
+local HitboxSection = HitboxTab:CreateSection("Expansão de Hitbox")
+
+-- Variáveis para Hitbox
+getgenv().HitboxEnabled = false
+getgenv().HitboxMultiplier = 3.0 -- Multiplicador padrão
+local originalSizes = {} -- Armazena tamanhos originais
+
+-- Toggle principal para Hitbox
+local HitboxToggle = HitboxTab:CreateToggle({
+    Name = "Ativar Expansão de Hitbox",
+    CurrentValue = false,
+    Flag = "HitboxToggle",
     Callback = function(Value)
-        getgenv().PredictionFactor = Value
+        getgenv().HitboxEnabled = Value
+        if Value then
+            ExpandHitboxes(true)
+            Rayfield:Notify({
+                Title = "Hitbox Expansão Ativada",
+                Content = "Partes selecionadas expandidas!",
+                Duration = 3,
+                Image = 4483362458
+            })
+        else
+            ExpandHitboxes(false)
+            Rayfield:Notify({
+                Title = "Hitbox Expansão Desativada",
+                Content = "Tamanhos restaurados.",
+                Duration = 3,
+                Image = nil
+            })
+        end
     end,
 })
+
+-- Toggles para partes específicas
+local ExpandHead = HitboxTab:CreateToggle({
+    Name = "Expandir Cabeça",
+    CurrentValue = true,
+    Flag = "ExpandHead",
+    Callback = function(Value)
+        -- Aplica imediatamente se ativado
+        if getgenv().HitboxEnabled then
+            ExpandHitboxes(true)
+        end
+    end,
+})
+
+local ExpandTorso = HitboxTab:CreateToggle({
+    Name = "Expandir Torso",
+    CurrentValue = true,
+    Flag = "ExpandTorso",
+    Callback = function(Value)
+        if getgenv().HitboxEnabled then
+            ExpandHitboxes(true)
+        end
+    end,
+})
+
+local ExpandArms = HitboxTab:CreateToggle({
+    Name = "Expandir Braços",
+    CurrentValue = false,
+    Flag = "ExpandArms",
+    Callback = function(Value)
+        if getgenv().HitboxEnabled then
+            ExpandHitboxes(true)
+        end
+    end,
+})
+
+local ExpandLegs = HitboxTab:CreateToggle({
+    Name = "Expandir Pernas",
+    CurrentValue = false,
+    Flag = "ExpandLegs",
+    Callback = function(Value)
+        if getgenv().HitboxEnabled then
+            ExpandHitboxes(true)
+        end
+    end,
+})
+
+-- Slider para Multiplicador
+local MultiplierSlider = HitboxTab:CreateSlider({
+    Name = "Multiplicador de Tamanho",
+    Range = {1, 10},
+    Increment = 0.5,
+    Suffix = "x",
+    CurrentValue = 3.0,
+    Flag = "MultiplierSlider",
+    Callback = function(Value)
+        getgenv().HitboxMultiplier = Value
+        if getgenv().HitboxEnabled then
+            ExpandHitboxes(true)
+        end
+    end,
+})
+
+-- Função para expandir hitboxes
+function ExpandHitboxes(enable)
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local partsToExpand = {"Head", "UpperTorso", "LowerTorso", "LeftUpperArm", "LeftLowerArm", "RightUpperArm", "RightLowerArm", "LeftUpperLeg", "LeftLowerLeg", "RightUpperLeg", "RightLowerLeg"}
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            for _, partName in pairs(partsToExpand) do
+                local part = player.Character:FindFirstChild(partName)
+                if part and part:IsA("BasePart") then
+                    if enable then
+                        -- Armazena original se não tiver
+                        if not originalSizes[player.UserId .. partName] then
+                            originalSizes[player.UserId .. partName] = part.Size
+                        end
+                        
+                        -- Verifica se deve expandir baseado no toggle
+                        local shouldExpand = false
+                        if partName == "Head" and ExpandHead.CurrentValue then shouldExpand = true
+                        elseif (partName == "UpperTorso" or partName == "LowerTorso") and ExpandTorso.CurrentValue then shouldExpand = true
+                        elseif (partName:find("Arm") or partName:find("Hand")) and ExpandArms.CurrentValue then shouldExpand = true
+                        elseif (partName:find("Leg") or partName:find("Foot")) and ExpandLegs.CurrentValue then shouldExpand = true
+                        end
+                        
+                        if shouldExpand then
+                            part.Size = originalSizes[player.UserId .. partName] * getgenv().HitboxMultiplier
+                            part.Transparency = 0.5 -- Opcional: semi-transparente pra ver expansão
+                        end
+                    else
+                        -- Restaura
+                        if originalSizes[player.UserId .. partName] then
+                            part.Size = originalSizes[player.UserId .. partName]
+                            part.Transparency = 0
+                            originalSizes[player.UserId .. partName] = nil
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Loop para atualizar hitboxes em novos players ou mudanças
+game:GetService("RunService").Heartbeat:Connect(function()
+    if getgenv().HitboxEnabled then
+        ExpandHitboxes(true)
+    end
+end)
 
 -- Serviços
 local Players = game:GetService("Players")
@@ -206,6 +366,7 @@ RunService.RenderStepped:Connect(function()
     FOVring.Visible = getgenv().AimbotEnabled and getgenv().FOVringEnabled
     if FOVring.Visible then
         FOVring.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        FOVring.Radius = getgenv().AimRadius -- Atualiza raio
     end
 end)
 
@@ -227,11 +388,12 @@ local function IsTargetVisible(TargetPart)
     return false
 end
 
--- Função para encontrar alvo mais próximo
+-- Função para encontrar alvo mais próximo (modificado para FOV Type)
 local function GetClosestTarget()
-    local ClosestDistance = getgenv().AimRadius
+    local ClosestDistance = math.huge
     local Target = nil
     local MousePos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    
     for _, Player in pairs(Players:GetPlayers()) do
         if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild(getgenv().AimPart) then
             if Player.Character:FindFirstChild("Humanoid") and Player.Character.Humanoid.Health <= 0 then
@@ -240,11 +402,23 @@ local function GetClosestTarget()
             if getgenv().TeamCheck and Player.Team == LocalPlayer.Team then continue end
             local TargetPart = Player.Character[getgenv().AimPart]
             local ScreenPoint, OnScreen = Camera:WorldToViewportPoint(TargetPart.Position)
-            local Distance = (Vector2.new(ScreenPoint.X, ScreenPoint.Y) - MousePos).Magnitude
-            if OnScreen and Distance < ClosestDistance then
+            local ScreenDistance = (Vector2.new(ScreenPoint.X, ScreenPoint.Y) - MousePos).Magnitude
+            local WorldDistance = (TargetPart.Position - Camera.CFrame.Position).Magnitude
+            
+            local InFOV = false
+            if getgenv().FOVType == "Screen" then
+                InFOV = OnScreen and ScreenDistance < getgenv().AimRadius
+            else -- World
+                InFOV = WorldDistance < getgenv().AimMaxDistance
+            end
+            
+            if InFOV then
+                local Distance = getgenv().FOVType == "Screen" and ScreenDistance or WorldDistance
                 if not getgenv().WallCheckEnabled or IsTargetVisible(TargetPart) then
-                    ClosestDistance = Distance
-                    Target = Player
+                    if Distance < ClosestDistance then
+                        ClosestDistance = Distance
+                        Target = Player
+                    end
                 end
             end
         end
@@ -252,15 +426,7 @@ local function GetClosestTarget()
     return Target
 end
 
--- Função de previsão
-local function PredictPosition(Target)
-    if Target and Target.Character and Target.Character:FindFirstChild("HumanoidRootPart") then
-        local Velocity = Target.Character.HumanoidRootPart.Velocity
-        local Position = Target.Character[getgenv().AimPart].Position
-        return Position + (Velocity * getgenv().PredictionFactor)
-    end
-    return nil
-end
+-- REMOVIDA: Função de previsão (agora usa posição direta)
 
 -- NOVA: Função NoRecoil - Puxa mira pra baixo no tiro
 local recoilConnection = nil
@@ -275,14 +441,6 @@ local function SetupNoRecoil()
             local currentCFrame = Camera.CFrame
             local recoilAdjust = CFrame.Angles(math.rad(-getgenv().RecoilCompensation), 0, 0) -- Down no Y
             Camera.CFrame = currentCFrame * recoilAdjust
-            
-            -- Notificação debug (comenta se quiser)
-            Rayfield:Notify({
-                Title = "Recoil Compensado!",
-                Content = "Mira puxada pra baixo no tiro.",
-                Duration = 0.5,
-                Image = 4483362458
-            })
         end)
     elseif recoilConnection then
         recoilConnection:Disconnect()
@@ -293,7 +451,6 @@ end
 -- Lógica principal: Modo normal (bruto) OU Trigger
 local currentTarget = nil
 local triggerConnection = nil
-local triggerCoroutine = nil
 
 -- Setup Trigger se ligado
 local function SetupTrigger()
@@ -308,14 +465,19 @@ local function SetupTrigger()
                     return
                 end
                 
-                local PredictedPos = PredictPosition(ClosestTarget)
-                local TargetCFrame = CFrame.new(Camera.CFrame.Position, PredictedPos or ClosestTarget.Character[getgenv().AimPart].Position)
+                -- Posição direta, sem previsão
+                local TargetPos = ClosestTarget.Character[getgenv().AimPart].Position
+                local TargetCFrame = CFrame.new(Camera.CFrame.Position, TargetPos)
                 
                 -- Snap bruto no trigger
-                Camera.CFrame = TargetCFrame -- Direto, sem lerp
+                if getgenv().TriggerSmooth < 1 then
+                    Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, getgenv().TriggerSmooth)
+                else
+                    Camera.CFrame = TargetCFrame
+                end
                 
                 FOVring.Color = Color3.fromRGB(0, 255, 0)
-                wait(0.5)
+                wait(0.1) -- Curto
                 FOVring.Color = Color3.fromRGB(255, 0, 0)
             end
         end)
@@ -351,21 +513,27 @@ RunService.RenderStepped:Connect(function()
             return
         end
         currentTarget = ClosestTarget
-        local PredictedPos = PredictPosition(currentTarget)
-        local TargetCFrame = CFrame.new(Camera.CFrame.Position, PredictedPos or currentTarget.Character[getgenv().AimPart].Position)
-        -- Snap com lerp (mas com 1.0 = full snap)
-        Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, getgenv().SmoothnessAmount)
-        FOVring.Color = Color3.fromRGB(0, 255, 0)
+        -- Posição direta, sem previsão
+        local TargetPos = currentTarget.Character[getgenv().AimPart].Position
+        local TargetCFrame = CFrame.new(Camera.CFrame.Position, TargetPos)
+        
+        -- Aplica snap
+        if getgenv().SmoothnessAmount < 1 then
+            Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, getgenv().SmoothnessAmount)
+        else
+            Camera.CFrame = TargetCFrame
+        end
+        
+        FOVring.Color = Color3.fromRGB(0, 255, 0) -- Verde quando mirando
     else
         currentTarget = nil
         FOVring.Color = Color3.fromRGB(255, 0, 0)
     end
 end)
 
--- Notificação inicial
-Rayfield:Notify({
-    Title = "Script Bruto Carregado!",
-    Content = "Snap na cabeça + NoRecoil pronto! Ativa e testa na alt - sem piedade!",
-    Duration = 5,
-    Image = 4483362458
-})
+-- Limpeza no unload (opcional)
+game:BindToClose(function()
+    if getgenv().HitboxEnabled then
+        ExpandHitboxes(false)
+    end
+end)
